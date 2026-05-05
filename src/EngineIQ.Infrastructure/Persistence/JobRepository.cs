@@ -1,0 +1,260 @@
+using EngineIQ.Domain.Audit;
+using EngineIQ.Domain.Interfaces;
+using EngineIQ.Domain.Persistence;
+using EngineIQ.Infrastructure.Persistence.Entities;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using Npgsql;
+
+namespace EngineIQ.Infrastructure.Persistence;
+
+public sealed class JobRepository : IJobRepository
+{
+    private readonly IDbContextFactory<EngineIQDbContext> _factory;
+    private readonly IOptions<PostgresOptions> _options;
+
+    public JobRepository(IDbContextFactory<EngineIQDbContext> factory, IOptions<PostgresOptions> options)
+    {
+        _factory = factory;
+        _options = options;
+    }
+
+    public async Task<PrJobEnqueueResult> TryCreateQueuedJobAsync(
+        long githubAppInstallationId,
+        string repositoryFullName,
+        int prNumber,
+        string githubDeliveryId,
+        CancellationToken cancellationToken = default)
+    {
+        var tenantId = await ResolveTenantIdByInstallationAsync(githubAppInstallationId, cancellationToken);
+        if (tenantId is null)
+            return new PrJobEnqueueResult(false, null, null, null, githubAppInstallationId);
+
+        await using (var gate = await _factory.CreateDbContextAsync(cancellationToken))
+        {
+            var tenantStatus = await gate.Tenants.AsNoTracking()
+                .Where(t => t.Id == tenantId.Value)
+                .Select(t => t.Status)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (string.Equals(tenantStatus, "Suspended", StringComparison.OrdinalIgnoreCase))
+                return new PrJobEnqueueResult(false, tenantId, null, null, githubAppInstallationId, "suspended");
+        }
+
+        for (var attempt = 0; attempt < 4; attempt++)
+        {
+            await using var db = await _factory.CreateDbContextAsync(cancellationToken);
+            await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
+            await db.SetCurrentTenantAsync(tenantId.Value, cancellationToken);
+
+            try
+            {
+                var repository = await db.Repositories
+                    .FirstOrDefaultAsync(r => r.FullName == repositoryFullName, cancellationToken);
+
+                if (repository is null)
+                {
+                    repository = new Repository
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = tenantId.Value,
+                        FullName = repositoryFullName
+                    };
+                    db.Repositories.Add(repository);
+                    await db.SaveChangesAsync(cancellationToken);
+                }
+
+                var job = new PrReviewJob
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = tenantId.Value,
+                    RepositoryId = repository.Id,
+                    PrNumber = prNumber,
+                    GithubDeliveryId = githubDeliveryId,
+                    Status = ReviewJobStatuses.Queued,
+                    CreatedAt = DateTimeOffset.UtcNow
+                };
+
+                db.PrReviewJobs.Add(job);
+                await db.SaveChangesAsync(cancellationToken);
+                await tx.CommitAsync(cancellationToken);
+                return new PrJobEnqueueResult(true, tenantId, repository.Id, job.Id, githubAppInstallationId);
+            }
+            catch (DbUpdateException ex) when (IsUniqueViolation(ex))
+            {
+                await tx.RollbackAsync(cancellationToken);
+                if (await IsDeliveryAlreadyQueuedAsync(tenantId.Value, githubDeliveryId, cancellationToken))
+                    return new PrJobEnqueueResult(false, tenantId, null, null, githubAppInstallationId, "duplicate");
+
+                // Repository (tenant_id, full_name) race — retry
+            }
+        }
+
+        return new PrJobEnqueueResult(false, tenantId, null, null, githubAppInstallationId, "enqueue_failed");
+    }
+
+    private async Task<bool> IsDeliveryAlreadyQueuedAsync(Guid tenantId, string githubDeliveryId, CancellationToken cancellationToken)
+    {
+        await using var db = await _factory.CreateDbContextAsync(cancellationToken);
+        await db.SetCurrentTenantAsync(tenantId, cancellationToken);
+        return await db.PrReviewJobs.AnyAsync(j => j.GithubDeliveryId == githubDeliveryId, cancellationToken);
+    }
+
+    private static bool IsUniqueViolation(DbUpdateException ex) =>
+        ex.InnerException is PostgresException pg && pg.SqlState == PostgresErrorCodes.UniqueViolation;
+
+    private async Task<Guid?> ResolveTenantIdByInstallationAsync(long installationId, CancellationToken cancellationToken)
+    {
+        var cs = _options.Value.ConnectionString;
+        if (string.IsNullOrWhiteSpace(cs))
+            throw new InvalidOperationException("Postgres:ConnectionString is not configured.");
+
+        await using var conn = new NpgsqlConnection(cs);
+        await conn.OpenAsync(cancellationToken);
+        await using var cmd = new NpgsqlCommand(
+            "SELECT public.fn_resolve_tenant_by_installation(@i)",
+            conn);
+        cmd.Parameters.AddWithValue("i", installationId);
+        var result = await cmd.ExecuteScalarAsync(cancellationToken);
+        return result is Guid g ? g : null;
+    }
+
+    public async Task MarkJobProcessingAsync(Guid tenantId, Guid jobId, CancellationToken cancellationToken = default)
+    {
+        await using var db = await _factory.CreateDbContextAsync(cancellationToken);
+        await db.SetCurrentTenantAsync(tenantId, cancellationToken);
+        var job = await db.PrReviewJobs.FirstOrDefaultAsync(j => j.Id == jobId, cancellationToken);
+        if (job is null) return;
+        job.Status = ReviewJobStatuses.Processing;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task MarkJobCompletedAsync(
+        Guid tenantId,
+        Guid jobId,
+        long durationMs,
+        int findingsCount,
+        int inputTokens,
+        int outputTokens,
+        decimal estimatedCostZar,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await _factory.CreateDbContextAsync(cancellationToken);
+        await db.SetCurrentTenantAsync(tenantId, cancellationToken);
+        var job = await db.PrReviewJobs.FirstOrDefaultAsync(j => j.Id == jobId, cancellationToken);
+        if (job is null) return;
+        job.Status = ReviewJobStatuses.Completed;
+        job.CompletedAt = DateTimeOffset.UtcNow;
+        job.DurationMs = durationMs;
+        job.FindingsCount = findingsCount;
+        job.InputTokens = inputTokens;
+        job.OutputTokens = outputTokens;
+        job.EstimatedCostZar = estimatedCostZar;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<(IReadOnlyList<TenantAuditReviewRow> Items, int TotalCount)> ListAuditReviewsAsync(
+        Guid tenantId,
+        int skip,
+        int take,
+        CancellationToken cancellationToken = default)
+    {
+        skip = Math.Max(0, skip);
+        take = Math.Clamp(take, 1, 500);
+
+        await using var db = await _factory.CreateDbContextAsync(cancellationToken);
+        await db.SetCurrentTenantAsync(tenantId, cancellationToken);
+
+        var baseQuery = db.PrReviewJobs.AsNoTracking()
+            .Where(j => j.TenantId == tenantId && j.Status == ReviewJobStatuses.Completed && j.CompletedAt != null);
+
+        var total = await baseQuery.CountAsync(cancellationToken);
+
+        var jobs = await baseQuery
+            .OrderByDescending(j => j.CompletedAt)
+            .Skip(skip)
+            .Take(take)
+            .Include(j => j.Repository)
+            .ToListAsync(cancellationToken);
+
+        var rows = jobs
+            .Where(j => j.Repository is not null)
+            .Select(j => new TenantAuditReviewRow(
+                j.CompletedAt!.Value,
+                j.PrNumber,
+                j.Repository!.FullName,
+                j.FindingsCount,
+                j.DurationMs,
+                j.EstimatedCostZar,
+                j.InputTokens,
+                j.OutputTokens))
+            .ToList();
+
+        return (rows, total);
+    }
+
+    public async Task MarkJobFailedAsync(Guid tenantId, Guid jobId, long? durationMs, CancellationToken cancellationToken = default)
+    {
+        await using var db = await _factory.CreateDbContextAsync(cancellationToken);
+        await db.SetCurrentTenantAsync(tenantId, cancellationToken);
+        var job = await db.PrReviewJobs.FirstOrDefaultAsync(j => j.Id == jobId, cancellationToken);
+        if (job is null) return;
+        job.Status = ReviewJobStatuses.Failed;
+        job.CompletedAt = DateTimeOffset.UtcNow;
+        job.DurationMs = durationMs;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task DeleteQueuedJobAsync(Guid tenantId, Guid jobId, CancellationToken cancellationToken = default)
+    {
+        await using var db = await _factory.CreateDbContextAsync(cancellationToken);
+        await db.SetCurrentTenantAsync(tenantId, cancellationToken);
+        var job = await db.PrReviewJobs.FirstOrDefaultAsync(j => j.Id == jobId, cancellationToken);
+        if (job is null) return;
+        db.PrReviewJobs.Remove(job);
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<FailedJobRetryInfo?> TryResetFailedJobToQueuedAsync(
+        Guid tenantId,
+        Guid jobId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await _factory.CreateDbContextAsync(cancellationToken);
+        await db.SetCurrentTenantAsync(tenantId, cancellationToken);
+        var job = await db.PrReviewJobs
+            .Include(j => j.Repository)
+            .FirstOrDefaultAsync(j => j.Id == jobId, cancellationToken);
+        if (job is null || job.Repository is null || job.Status != ReviewJobStatuses.Failed)
+            return null;
+
+        var tenant = await db.Tenants.AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Id == tenantId, cancellationToken);
+        if (tenant?.GitHubAppInstallationId is null)
+            return null;
+
+        var (owner, repo) = ParseOwnerRepo(job.Repository.FullName);
+        if (string.IsNullOrEmpty(owner) || string.IsNullOrEmpty(repo))
+            return null;
+
+        job.Status = ReviewJobStatuses.Queued;
+        job.CompletedAt = null;
+        job.DurationMs = null;
+        await db.SaveChangesAsync(cancellationToken);
+
+        return new FailedJobRetryInfo(
+            tenantId,
+            jobId,
+            job.RepositoryId,
+            tenant.GitHubAppInstallationId.Value,
+            owner,
+            repo,
+            job.PrNumber);
+    }
+
+    private static (string Owner, string Repo) ParseOwnerRepo(string fullName)
+    {
+        var parts = fullName.Split('/', 2, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length != 2) return ("", "");
+        return (parts[0], parts[1]);
+    }
+}

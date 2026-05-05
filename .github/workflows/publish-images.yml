@@ -1,0 +1,57 @@
+# Builds and pushes all EngineIQ images to GHCR for Hetzner pull-based deploy.
+# Server .env: ENGINEIQ_REGISTRY=ghcr.io/ntokyb/engineiq  ENGINEIQ_TAG=main (or latest)
+name: Publish Docker images
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/engineiq
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: engineiq-api
+            dockerfile: docker/Dockerfile.api
+          - id: engineiq-worker
+            dockerfile: docker/Dockerfile.worker
+          - id: engineiq-admin
+            dockerfile: docker/Dockerfile.admin
+          - id: engineiq-migrator
+            dockerfile: docker/Dockerfile.migrator
+          - id: engineiq-marketing
+            dockerfile: docker/Dockerfile.marketing
+          - id: engineiq-portal
+            dockerfile: docker/Dockerfile.portal
+          - id: engineiq-reporting
+            dockerfile: docker/Dockerfile.reporting
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push ${{ matrix.id }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/${{ matrix.id }}:latest
+            ${{ env.IMAGE_PREFIX }}/${{ matrix.id }}:${{ github.sha }}

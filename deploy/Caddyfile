@@ -1,0 +1,22 @@
+{
+	email {$CADDY_ACME_EMAIL}
+}
+
+www.engineiq.co.za {
+	redir https://engineiq.co.za{uri} permanent
+}
+
+engineiq.co.za {
+	encode gzip
+	reverse_proxy engineiq-marketing:80
+}
+
+app.engineiq.co.za {
+	encode gzip
+	reverse_proxy engineiq-portal:80
+}
+
+api.engineiq.co.za {
+	encode gzip
+	reverse_proxy engineiq-api:5000
+}

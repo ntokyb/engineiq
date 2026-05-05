@@ -1,0 +1,83 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Cryptography;
+using System.Text;
+using EiqGitHubClient = EngineIQ.Domain.Interfaces.IGitHubClient;
+using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
+using Octokit;
+
+namespace EngineIQ.GitHub;
+
+public class GitHubAppClient : EiqGitHubClient
+{
+    private readonly GitHubClientOptions _options;
+
+    public GitHubAppClient(IOptions<GitHubClientOptions> options)
+    {
+        _options = options.Value;
+    }
+
+    public async Task<string> GetPullRequestDiffAsync(long installationId, string owner, string repo, int prNumber, CancellationToken cancellationToken = default)
+    {
+        var client = await GetInstallationClientAsync(installationId, cancellationToken);
+        return await client.GetPullRequestDiffAsync(installationId, owner, repo, prNumber, cancellationToken);
+    }
+
+    public async Task PostReviewCommentAsync(long installationId, string owner, string repo, int prNumber, string body, CancellationToken cancellationToken = default)
+    {
+        var client = await GetInstallationClientAsync(installationId, cancellationToken);
+        await client.PostReviewCommentAsync(installationId, owner, repo, prNumber, body, cancellationToken);
+    }
+
+    private async Task<EiqGitHubClient> GetInstallationClientAsync(long installationId, CancellationToken cancellationToken)
+    {
+        var jwt = CreateJwt();
+        var appClient = new GitHubClient(new ProductHeaderValue("EngineIQ"))
+        {
+            Credentials = new Credentials(jwt, AuthenticationType.Bearer)
+        };
+        var token = await appClient.GitHubApps.CreateInstallationToken(installationId);
+        var installationClient = new GitHubClient(new ProductHeaderValue("EngineIQ"))
+        {
+            Credentials = new Credentials(token.Token, AuthenticationType.Bearer)
+        };
+        return new InstallationGitHubClient(installationClient);
+    }
+
+    private string CreateJwt()
+    {
+        using var rsa = RSA.Create();
+        rsa.ImportFromPem(_options.PrivateKeyPem);
+        var key = new RsaSecurityKey(rsa.ExportParameters(true));
+        var now = DateTime.UtcNow;
+        var descriptor = new SecurityTokenDescriptor
+        {
+            Issuer = _options.AppId.ToString(),
+            IssuedAt = now.AddSeconds(-60),
+            Expires = now.AddMinutes(10),
+            SigningCredentials = new SigningCredentials(key, SecurityAlgorithms.RsaSha256)
+        };
+        var handler = new JwtSecurityTokenHandler();
+        var token = handler.CreateToken(descriptor);
+        return handler.WriteToken(token);
+    }
+
+    private class InstallationGitHubClient : EiqGitHubClient
+    {
+        private readonly GitHubClient _client;
+
+        public InstallationGitHubClient(GitHubClient client) => _client = client;
+
+        public async Task<string> GetPullRequestDiffAsync(long installationId, string owner, string repo, int prNumber, CancellationToken cancellationToken = default)
+        {
+            var files = await _client.PullRequest.Files(owner, repo, prNumber);
+            var diff = new StringBuilder();
+            foreach (var file in files)
+                diff.AppendLine(file.Patch ?? $"diff --git a/{file.FileName} b/{file.FileName}\nnew file");
+            return diff.ToString();
+        }
+
+        public Task PostReviewCommentAsync(long installationId, string owner, string repo, int prNumber, string body, CancellationToken cancellationToken = default)
+            => _client.Issue.Comment.Create(owner, repo, prNumber, body);
+    }
+}

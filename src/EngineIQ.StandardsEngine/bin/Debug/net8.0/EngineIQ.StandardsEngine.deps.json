@@ -1,0 +1,39 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v8.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v8.0": {
+      "EngineIQ.StandardsEngine/1.0.0": {
+        "dependencies": {
+          "EngineIQ.Domain": "1.0.0"
+        },
+        "runtime": {
+          "EngineIQ.StandardsEngine.dll": {}
+        }
+      },
+      "EngineIQ.Domain/1.0.0": {
+        "runtime": {
+          "EngineIQ.Domain.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "EngineIQ.StandardsEngine/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "EngineIQ.Domain/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

@@ -1,0 +1,230 @@
+using System.Text.Json.Serialization;
+using EngineIQ.API.Validation;
+using EngineIQ.Domain.Interfaces;
+using EngineIQ.Domain.Tenants;
+using Microsoft.AspNetCore.Cors;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+
+namespace EngineIQ.API.Controllers;
+
+[ApiController]
+[Route("api/v1/tenant/{id:guid}")]
+[EnableRateLimiting("tenantApi")]
+[EnableCors("Portal")]
+public sealed class TenantController : ControllerBase
+{
+    private readonly ITenantRepository _tenants;
+    private readonly IFindingRepository _findings;
+    private readonly IJobRepository _jobs;
+    private readonly StandardsConfigYamlValidator _yamlValidator;
+
+    public TenantController(
+        ITenantRepository tenants,
+        IFindingRepository findings,
+        IJobRepository jobs,
+        StandardsConfigYamlValidator yamlValidator)
+    {
+        _tenants = tenants;
+        _findings = findings;
+        _jobs = jobs;
+        _yamlValidator = yamlValidator;
+    }
+
+    [HttpGet("status")]
+    public async Task<ActionResult<TenantStatusResponse>> Status(Guid id, CancellationToken cancellationToken)
+    {
+        var snapshot = await _tenants.GetStatusSnapshotAsync(id, cancellationToken);
+        if (snapshot is null)
+            return NotFound();
+
+        return Ok(new TenantStatusResponse(
+            snapshot.OnboardingStatus,
+            snapshot.RepositoriesDetected,
+            snapshot.FirstPrReviewed));
+    }
+
+    [HttpGet("account")]
+    public async Task<ActionResult<TenantAccountResponse>> Account(Guid id, CancellationToken cancellationToken)
+    {
+        var a = await _tenants.GetAccountSnapshotAsync(id, cancellationToken);
+        if (a is null)
+            return NotFound();
+
+        return Ok(new TenantAccountResponse(
+            a.TenantId,
+            a.CompanyName,
+            a.Plan,
+            a.Status,
+            a.ContactEmail,
+            a.GitHubOrgLogin,
+            a.GitHubAppConnected,
+            a.GitHubAppInstallationId,
+            a.HasConfigYaml));
+    }
+
+    [HttpGet("analytics")]
+    public async Task<ActionResult<TenantAnalyticsResponse>> Analytics(
+        Guid id,
+        [FromQuery] int days = 30,
+        CancellationToken cancellationToken = default)
+    {
+        var a = await _tenants.GetDashboardAnalyticsAsync(id, days, cancellationToken);
+        if (a is null)
+            return NotFound();
+
+        return Ok(new TenantAnalyticsResponse(
+            a.Days,
+            a.PrsReviewedInPeriod,
+            a.ViolationsInPeriod,
+            a.PrsReviewedPerDay.Select(d => new DailyCountResponse(d.Date.ToString("yyyy-MM-dd"), d.Count)).ToList(),
+            a.ViolationsPerDay.Select(d => new DailyCountResponse(d.Date.ToString("yyyy-MM-dd"), d.Count)).ToList(),
+            a.ArchitectureDriftScore,
+            a.ArchitectureDriftNote));
+    }
+
+    [HttpGet("audit")]
+    public async Task<ActionResult<AuditLogPageResponse>> Audit(
+        Guid id,
+        [FromQuery] int skip = 0,
+        [FromQuery] int take = 50,
+        CancellationToken cancellationToken = default)
+    {
+        if (await _tenants.GetAccountSnapshotAsync(id, cancellationToken) is null)
+            return NotFound();
+
+        var (items, total) = await _jobs.ListAuditReviewsAsync(id, skip, take, cancellationToken);
+        return Ok(new AuditLogPageResponse(
+            total,
+            items.Select(e => new AuditLogRowResponse(
+                e.Timestamp,
+                e.PrNumber,
+                e.RepositoryFullName,
+                e.FindingsCount,
+                e.DurationMs,
+                e.EstimatedCostZar,
+                e.InputTokens,
+                e.OutputTokens)).ToList()));
+    }
+
+    [HttpGet("findings")]
+    public async Task<ActionResult<FindingsPageResponse>> Findings(
+        Guid id,
+        [FromQuery] string? severity,
+        [FromQuery] string? file,
+        [FromQuery] string? rule_id,
+        [FromQuery] int skip = 0,
+        [FromQuery] int take = 50,
+        CancellationToken cancellationToken = default)
+    {
+        var q = new FindingListQuery(severity, file, rule_id, skip, take);
+        var (items, total) = await _findings.ListForTenantAsync(id, q, cancellationToken);
+        return Ok(new FindingsPageResponse(
+            total,
+            items.Select(f => new FindingRowResponse(
+                f.Id,
+                f.Severity,
+                f.Category,
+                f.RuleId,
+                f.Source,
+                f.FilePath,
+                f.LineNumber,
+                f.Message,
+                f.WasActioned,
+                f.PrMergeStatus,
+                f.CreatedAt)).ToList()));
+    }
+
+    [HttpGet("config")]
+    [Produces("application/json")]
+    public async Task<ActionResult<TenantConfigGetResponse>> GetConfig(Guid id, CancellationToken cancellationToken)
+    {
+        if (await _tenants.GetAccountSnapshotAsync(id, cancellationToken) is null)
+            return NotFound();
+
+        var yaml = await _tenants.GetConfigYamlAsync(id, cancellationToken);
+        return Ok(new TenantConfigGetResponse(yaml ?? string.Empty));
+    }
+
+    [HttpPost("config")]
+    public async Task<ActionResult<ConfigValidationResponse>> PostConfig(Guid id, CancellationToken cancellationToken)
+    {
+        string yaml;
+        using (var reader = new StreamReader(Request.Body, leaveOpen: false))
+            yaml = await reader.ReadToEndAsync(cancellationToken);
+
+        var (valid, errors) = _yamlValidator.Validate(yaml);
+        if (!valid)
+            return BadRequest(new ConfigValidationResponse(false, errors));
+
+        await _tenants.UpdateConfigYamlAsync(id, yaml, cancellationToken);
+        return Ok(new ConfigValidationResponse(true, Array.Empty<string>()));
+    }
+
+    public sealed record TenantStatusResponse(
+        [property: JsonPropertyName("onboarding_status")] string OnboardingStatus,
+        [property: JsonPropertyName("repositories_detected")] int RepositoriesDetected,
+        [property: JsonPropertyName("first_pr_reviewed")] bool FirstPrReviewed);
+
+    public sealed record TenantAccountResponse(
+        [property: JsonPropertyName("tenant_id")] Guid TenantId,
+        [property: JsonPropertyName("company_name")] string CompanyName,
+        [property: JsonPropertyName("plan")] string Plan,
+        [property: JsonPropertyName("status")] string Status,
+        [property: JsonPropertyName("contact_email")] string? ContactEmail,
+        [property: JsonPropertyName("github_org")] string? GitHubOrg,
+        [property: JsonPropertyName("github_app_connected")] bool GitHubAppConnected,
+        [property: JsonPropertyName("github_app_installation_id")] long? GitHubAppInstallationId,
+        [property: JsonPropertyName("has_config_yaml")] bool HasConfigYaml);
+
+    public sealed record DailyCountResponse(
+        [property: JsonPropertyName("date")] string Date,
+        [property: JsonPropertyName("count")] int Count);
+
+    public sealed record TenantAnalyticsResponse(
+        [property: JsonPropertyName("days")] int Days,
+        [property: JsonPropertyName("prs_reviewed_in_period")] int PrsReviewedInPeriod,
+        [property: JsonPropertyName("violations_in_period")] int ViolationsInPeriod,
+        [property: JsonPropertyName("prs_reviewed_per_day")] IReadOnlyList<DailyCountResponse> PrsReviewedPerDay,
+        [property: JsonPropertyName("violations_per_day")] IReadOnlyList<DailyCountResponse> ViolationsPerDay,
+        [property: JsonPropertyName("architecture_drift_score")] int ArchitectureDriftScore,
+        [property: JsonPropertyName("architecture_drift_note")] string ArchitectureDriftNote);
+
+    public sealed record FindingRowResponse(
+        [property: JsonPropertyName("id")] Guid Id,
+        [property: JsonPropertyName("severity")] string Severity,
+        [property: JsonPropertyName("category")] string Category,
+        [property: JsonPropertyName("rule_id")] string? RuleId,
+        [property: JsonPropertyName("source")] string Source,
+        [property: JsonPropertyName("file_path")] string FilePath,
+        [property: JsonPropertyName("line_number")] int? LineNumber,
+        [property: JsonPropertyName("message")] string Message,
+        [property: JsonPropertyName("was_actioned")] bool WasActioned,
+        [property: JsonPropertyName("pr_merge_status")] string PrMergeStatus,
+        [property: JsonPropertyName("created_at")] DateTimeOffset CreatedAt);
+
+    public sealed record FindingsPageResponse(
+        [property: JsonPropertyName("total_count")] int TotalCount,
+        [property: JsonPropertyName("items")] IReadOnlyList<FindingRowResponse> Items);
+
+    public sealed record AuditLogRowResponse(
+        [property: JsonPropertyName("occurred_at")] DateTimeOffset OccurredAt,
+        [property: JsonPropertyName("pr_number")] int PrNumber,
+        [property: JsonPropertyName("repository_full_name")] string RepositoryFullName,
+        [property: JsonPropertyName("findings_count")] int FindingsCount,
+        [property: JsonPropertyName("review_duration_ms")] long? ReviewDurationMs,
+        [property: JsonPropertyName("estimated_cost_zar")] decimal? EstimatedCostZar,
+        [property: JsonPropertyName("input_tokens")] int InputTokens,
+        [property: JsonPropertyName("output_tokens")] int OutputTokens);
+
+    public sealed record AuditLogPageResponse(
+        [property: JsonPropertyName("total_count")] int TotalCount,
+        [property: JsonPropertyName("items")] IReadOnlyList<AuditLogRowResponse> Items);
+
+    public sealed record TenantConfigGetResponse(
+        [property: JsonPropertyName("config_yaml")] string ConfigYaml);
+
+    public sealed record ConfigValidationResponse(
+        [property: JsonPropertyName("valid")] bool Valid,
+        [property: JsonPropertyName("errors")] IReadOnlyList<string> Errors);
+}

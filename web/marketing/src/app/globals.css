@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --engineiq-teal: #14b8a6;
+  --engineiq-teal-dim: #0d9488;
+}
+
+body {
+  @apply antialiased;
+}
+
+.glow-border {
+  box-shadow: 0 0 0 1px rgba(20, 184, 166, 0.25), 0 0 40px rgba(20, 184, 166, 0.08);
+}

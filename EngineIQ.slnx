@@ -1,0 +1,18 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/EngineIQ.AIEngine/EngineIQ.AIEngine.csproj" />
+    <Project Path="src/EngineIQ.API/EngineIQ.API.csproj" />
+    <Project Path="src/EngineIQ.ContextBuilder/EngineIQ.ContextBuilder.csproj" />
+    <Project Path="src/EngineIQ.Domain/EngineIQ.Domain.csproj" />
+    <Project Path="src/EngineIQ.FeedbackGenerator/EngineIQ.FeedbackGenerator.csproj" />
+    <Project Path="src/EngineIQ.GitHub/EngineIQ.GitHub.csproj" />
+    <Project Path="src/EngineIQ.Infrastructure/EngineIQ.Infrastructure.csproj" />
+    <Project Path="src/EngineIQ.ReviewEngine/EngineIQ.ReviewEngine.csproj" />
+    <Project Path="src/EngineIQ.StandardsEngine/EngineIQ.StandardsEngine.csproj" />
+    <Project Path="src/EngineIQ.Worker/EngineIQ.Worker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/EngineIQ.Tests.Integration/EngineIQ.Tests.Integration.csproj" />
+    <Project Path="tests/EngineIQ.Tests.Unit/EngineIQ.Tests.Unit.csproj" />
+  </Folder>
+</Solution>

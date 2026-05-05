@@ -1,0 +1,231 @@
+# EngineIQ full stack — Hetzner / production (`./deploy.sh` uses --profile platform).
+# Local DB only: docker compose up -d  (postgres + redis + rabbitmq)
+# Full stack:     docker compose --profile platform up -d
+# Images: ENGINEIQ_REGISTRY + ENGINEIQ_TAG (pull), or SKIP_PULL=1 ./deploy.sh to build on the host.
+
+name: engineiq
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-engineiq}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-engineiq}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-engineiq} -d ${POSTGRES_DB:-engineiq}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-engineiq}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD in .env}
+    volumes:
+      - rabbitmqdata:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  engineiq-api:
+    profiles: [platform]
+    image: ${ENGINEIQ_REGISTRY:-engineiq}/engineiq-api:${ENGINEIQ_TAG:-latest}
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:5000
+      Postgres__ConnectionString: >-
+        Host=postgres;Port=5432;Username=${POSTGRES_USER:-engineiq};Password=${POSTGRES_PASSWORD};Database=${POSTGRES_DB:-engineiq}
+      RabbitMq__ConnectionString: amqp://${RABBITMQ_USER:-engineiq}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
+      RabbitMq__QueueName: ${RABBITMQ_QUEUE_NAME:-pr-review-jobs}
+      RabbitMq__DeadLetterQueueName: ${RABBITMQ_DLQ_NAME:-pr-review-jobs-dlq}
+      GitHub__AppId: ${GITHUB_APP_ID:?}
+      GitHub__AppSlug: ${GITHUB_APP_SLUG:-}
+      GitHub__PrivateKeyPem: ${GITHUB_PRIVATE_KEY_PEM:?}
+      GitHub__WebhookSecret: ${GITHUB_WEBHOOK_SECRET:?}
+      EngineIQ__DashboardBaseUrl: ${ENGINEIQ_DASHBOARD_BASE_URL:-https://app.engineiq.co.za}
+      Trust__PublicApiBaseUrl: ${TRUST_PUBLIC_API_BASE_URL:-https://api.engineiq.co.za}
+      Trust__DataLocation: ${TRUST_DATA_LOCATION:-Hetzner SA / Johannesburg}
+      Trust__DpaPdfUrl: ${TRUST_DPA_PDF_URL:-https://engineiq.co.za/legal/dpa.pdf}
+      Trust__AiProvider: ${TRUST_AI_PROVIDER:-Anthropic}
+      Cors__AllowedOrigins__0: https://engineiq.co.za
+      Cors__AllowedOrigins__1: https://www.engineiq.co.za
+      Cors__AllowedOrigins__2: https://app.engineiq.co.za
+      SendGrid__ApiKey: ${SENDGRID_API_KEY:-}
+      SendGrid__FromEmail: ${SENDGRID_FROM_EMAIL:-noreply@engineiq.co.za}
+      SendGrid__FromName: ${SENDGRID_FROM_NAME:-EngineIQ}
+      SendGrid__TemplateWelcome: ${SENDGRID_TEMPLATE_WELCOME:-}
+      SendGrid__TemplateLiveConfirmation: ${SENDGRID_TEMPLATE_LIVE_CONFIRMATION:-}
+      SendGrid__TemplateThirtyDayReport: ${SENDGRID_TEMPLATE_THIRTY_DAY_REPORT:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    expose:
+      - "5000"
+
+  engineiq-worker:
+    profiles: [platform]
+    image: ${ENGINEIQ_REGISTRY:-engineiq}/engineiq-worker:${ENGINEIQ_TAG:-latest}
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Postgres__ConnectionString: >-
+        Host=postgres;Port=5432;Username=${POSTGRES_USER:-engineiq};Password=${POSTGRES_PASSWORD};Database=${POSTGRES_DB:-engineiq}
+      RabbitMq__ConnectionString: amqp://${RABBITMQ_USER:-engineiq}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
+      RabbitMq__QueueName: ${RABBITMQ_QUEUE_NAME:-pr-review-jobs}
+      RabbitMq__DeadLetterQueueName: ${RABBITMQ_DLQ_NAME:-pr-review-jobs-dlq}
+      GitHub__AppId: ${GITHUB_APP_ID:?}
+      GitHub__AppSlug: ${GITHUB_APP_SLUG:-}
+      GitHub__PrivateKeyPem: ${GITHUB_PRIVATE_KEY_PEM:?}
+      Anthropic__ApiKey: ${ANTHROPIC_API_KEY:?}
+      Anthropic__Model: ${ANTHROPIC_MODEL:-claude-sonnet-4-6}
+      Anthropic__UsdToZar: ${ANTHROPIC_USD_TO_ZAR:-18.5}
+      Anthropic__InputUsdPerMillionTokens: ${ANTHROPIC_INPUT_USD_PER_MTOK:-3}
+      Anthropic__OutputUsdPerMillionTokens: ${ANTHROPIC_OUTPUT_USD_PER_MTOK:-15}
+      Trust__PublicApiBaseUrl: ${TRUST_PUBLIC_API_BASE_URL:-https://api.engineiq.co.za}
+      Trust__DataLocation: ${TRUST_DATA_LOCATION:-Hetzner SA / Johannesburg}
+      Trust__DpaPdfUrl: ${TRUST_DPA_PDF_URL:-https://engineiq.co.za/legal/dpa.pdf}
+      Trust__AiProvider: ${TRUST_AI_PROVIDER:-Anthropic}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  engineiq-admin:
+    profiles: [platform]
+    image: ${ENGINEIQ_REGISTRY:-engineiq}/engineiq-admin:${ENGINEIQ_TAG:-latest}
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.admin
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8081
+      Admin__Username: ${ENGINEIQ_ADMIN_USERNAME:-engineiq-admin}
+      Admin__Password: ${ENGINEIQ_ADMIN_PASSWORD:?Set ENGINEIQ_ADMIN_PASSWORD in .env}
+      Postgres__ConnectionString: >-
+        Host=postgres;Port=5432;Username=${POSTGRES_USER:-engineiq};Password=${POSTGRES_PASSWORD};Database=${POSTGRES_DB:-engineiq}
+      RabbitMq__ConnectionString: amqp://${RABBITMQ_USER:-engineiq}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
+      RabbitMq__QueueName: ${RABBITMQ_QUEUE_NAME:-pr-review-jobs}
+      RabbitMq__DeadLetterQueueName: ${RABBITMQ_DLQ_NAME:-pr-review-jobs-dlq}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8081:8081"
+
+  engineiq-marketing:
+    profiles: [platform]
+    image: ${ENGINEIQ_REGISTRY:-engineiq}/engineiq-marketing:${ENGINEIQ_TAG:-latest}
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.marketing
+      args:
+        NEXT_PUBLIC_ENGINEIQ_API_URL: ${NEXT_PUBLIC_ENGINEIQ_API_URL:-https://api.engineiq.co.za}
+        NEXT_PUBLIC_PORTAL_URL: ${NEXT_PUBLIC_PORTAL_URL:-https://app.engineiq.co.za}
+    restart: unless-stopped
+    expose:
+      - "80"
+
+  engineiq-portal:
+    profiles: [platform]
+    image: ${ENGINEIQ_REGISTRY:-engineiq}/engineiq-portal:${ENGINEIQ_TAG:-latest}
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.portal
+      args:
+        NEXT_PUBLIC_ENGINEIQ_API_URL: ${NEXT_PUBLIC_ENGINEIQ_API_URL:-https://api.engineiq.co.za}
+    restart: unless-stopped
+    expose:
+      - "80"
+
+  engineiq-reporting:
+    profiles: [platform]
+    image: ${ENGINEIQ_REGISTRY:-engineiq}/engineiq-reporting:${ENGINEIQ_TAG:-latest}
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.reporting
+    restart: unless-stopped
+    environment:
+      ENGINEIQ_API_BASE_URL: http://engineiq-api:5000
+    depends_on:
+      engineiq-api:
+        condition: service_healthy
+
+  engineiq-migrator:
+    profiles: [migration]
+    image: ${ENGINEIQ_REGISTRY:-engineiq}/engineiq-migrator:${ENGINEIQ_TAG:-latest}
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.migrator
+    environment:
+      Postgres__ConnectionString: >-
+        Host=postgres;Port=5432;Username=${POSTGRES_USER:-engineiq};Password=${POSTGRES_PASSWORD};Database=${POSTGRES_DB:-engineiq}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  caddy:
+    profiles: [platform]
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      # Production: set a real address in .env (Let's Encrypt registration & expiry mail).
+      CADDY_ACME_EMAIL: ${CADDY_ACME_EMAIL:-invalid@example.com}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      engineiq-api:
+        condition: service_healthy
+      engineiq-marketing:
+        condition: service_healthy
+      engineiq-portal:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  redisdata:
+  rabbitmqdata:
+  caddy_data:
+  caddy_config:

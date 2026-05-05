@@ -1,0 +1,16 @@
+# syntax=docker/dockerfile:1
+FROM node:20-alpine AS build
+WORKDIR /app
+COPY web/portal/package.json web/portal/package-lock.json ./
+RUN npm ci
+COPY web/portal/ ./
+ARG NEXT_PUBLIC_ENGINEIQ_API_URL=https://api.engineiq.co.za
+ENV NEXT_PUBLIC_ENGINEIQ_API_URL=$NEXT_PUBLIC_ENGINEIQ_API_URL
+RUN npm run build
+
+FROM nginx:alpine
+COPY deploy/nginx-spa.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/out /usr/share/nginx/html
+EXPOSE 80
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget -q -O /dev/null http://127.0.0.1/ || exit 1

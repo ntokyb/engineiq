@@ -1,0 +1,61 @@
+---
+description: EngineIQ B2B SaaS — non-negotiables, stack, and product context for South African engineering teams
+alwaysApply: true
+---
+
+# EngineIQ — project rules
+
+## Context
+
+EngineIQ is a B2B SaaS **engineering intelligence** platform for **South African** software companies. Design for POPIA-aware handling, clear tenant boundaries, and self-serve operations.
+
+## Rules you must never break
+
+1. **No source code persistence**  
+   Never write customer source code or full diffs to disk or database. Process diffs **in memory only**; persist at most non-sensitive metadata (paths, line numbers, messages, job state).
+
+2. **Tenant isolation in data access**  
+   Every database query that touches tenant-owned data **must** filter by `tenant_id` (or equivalent tenant key). Row-level security and application checks must align so cross-tenant reads or writes are **impossible**.
+
+3. **AI provider and model**  
+   Use **Anthropic Claude** only, deployment **`claude-sonnet-4-6`**. Do **not** use Azure OpenAI, OpenAI, or any other model/provider for product review flows unless this rule is explicitly updated.
+
+4. **Secrets**  
+   Load secrets from **environment variables** (or a secret manager that injects env at runtime). Never commit secrets. Never log secret values, tokens, API keys, or webhook signing material.
+
+5. **PR comment footer**  
+   Every GitHub PR comment **must** end with the Session 8 trust footer (ephemeral processing, no code stored, link to `GET /security` on the public API). Config: `Trust:PublicApiBaseUrl`.
+
+6. **Client onboarding**  
+   New clients must be onboarded **without any EngineIQ engineer manual step** (self-serve: install app / connect account, billing if applicable, defaults applied automatically).
+
+## Stack (target architecture)
+
+| Layer | Technology |
+|--------|------------|
+| API + background processing | .NET 8 (`EngineIQ.API`, `EngineIQ.Worker`) |
+| Data | PostgreSQL (tenant-scoped), Redis |
+| Messaging | RabbitMQ |
+| Reporting | Python 3.12 |
+| Website + customer portal | Next.js |
+| Edge / TLS | Caddy (reverse proxy) |
+| Deployment | **Docker Compose** on **Hetzner** |
+
+When adding services, prefer this stack unless there is an explicit ADR to diverge.
+
+## Current implementation state
+
+- **Webhook path**: HMAC validation, **PostgreSQL** claim on **GitHub `X-GitHub-Delivery`**, **RabbitMQ** enqueue, **200** without running the review on the HTTP thread (under **500ms** budget for claim + publish).
+- **Worker**: RabbitMQ consumer → **ReviewOrchestrator** (in-memory diff → **Claude** → GitHub comment + footer), **≤3 retries** then **DLQ**; review attempt **90s** max.
+- **Data**: PostgreSQL **tenant-scoped** tables + **RLS** (`app.current_tenant_id`), `ITenantRepository` / onboarding fields on `tenants`.
+- **Self-serve onboarding API** (`/api/v1/onboarding/*`, `/api/v1/tenant/{id}/*`): register (**`dpa_accepted: true`** required; stores **DPA timestamp + client IP**); GitHub App install URL + **API key**; per-tenant **`whsec_…`** stored as **SHA256 only**, emailed once (not in JSON response); welcome email includes **`Trust:DpaPdfUrl`**; GitHub callback stores `installation_id`; **SendGrid** templates from env; **X-Api-Key** on tenant routes; public **`GET /security`** (trust JSON); **`GET .../tenant/{id}/audit`** (completed review metadata only); **100 req/min** fixed window (by IP for onboarding, by tenant id for tenant API).
+- **Internal admin** (`EngineIQ.Admin`, default **http://127.0.0.1:8081**): Razor Pages + **Basic auth** (`Admin:*` from env); `/admin/tenants`, suspend (**Suspended** blocks new webhook enqueue + `fn_resolve` excludes suspended), upgrade plan + `feature_flags_json`; `/admin/metrics`; `/admin/jobs/dead-letter` (failed DB jobs + RabbitMQ DLQ peek/retry). Docker: `docker compose --profile admin up admin` (binds host **127.0.0.1:8081** only).
+- **Web**: `web/marketing` — Next.js 14 + Tailwind, **static export** (`output: 'export'`), **engineiq.co.za** pages; Sign Up → `POST /api/v1/onboarding/register`. `web/portal` — Next.js 14 app **app.engineiq.co.za**, API key auth → `/api/v1/tenant/{id}/*` (dashboard **analytics**, **findings**, **account**, **config** GET/POST). API **CORS** policy `Portal` + **OPTIONS** bypass in API key middleware.
+- **Deploy (Session 7)**: Root **`docker-compose.yml`** — **engineiq-api** (:5000 internal), **engineiq-worker**, **engineiq-admin** (host **127.0.0.1:8081**), **postgres:16**, **redis:7**, **rabbitmq:3-management**, **engineiq-reporting** (Python 3.12 + **supercronic**), **caddy:2** (80/443 → marketing / portal / API). Profile **`platform`** for app + edge; **`docker compose up -d`** alone = infra only (postgres/redis/rabbitmq). **`deploy/Caddyfile`** — Let's Encrypt for **engineiq.co.za**, **app.engineiq.co.za**, **api.engineiq.co.za**. **`deploy.sh`** — `pull` (or `SKIP_PULL=1` **build**), **`docker compose --profile migration run --rm engineiq-migrator`**, **`--profile platform up -d`**, internal health checks, optional **Slack**. Dockerfiles under **`docker/`**; **`EngineIQ.Migrator`** applies EF migrations. **`.env.example`** documents required env vars.
+- **Still to build**: Standards engine (beyond YAML shape validation), Redis/context, Python reporting, full Compose/Caddy on Hetzner, hardening.
+
+## Agent behaviour
+
+- Match existing naming and layout under `src/`.
+- Do not add markdown documentation files unless the user asks.
+- When introducing DB access, default to `tenant_id` in the same query as the primary filter and document RLS expectations in code comments only where non-obvious.

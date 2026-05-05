@@ -1,0 +1,28 @@
+# EngineIQ — Cursor project rules
+
+## Context
+
+You are building EngineIQ, a B2B SaaS engineering intelligence platform for South African software companies.
+
+## Rules you must never break
+
+- No source code is ever written to disk or database. Diffs are processed in memory only.
+- Every database query must filter by `tenant_id`. No cross-tenant data access is ever possible.
+- The AI provider is **Anthropic Claude** (`claude-sonnet-4-6`). Not Azure OpenAI. Not any other model.
+- Secrets are **environment variables only**. Never committed. Never logged.
+- Every PR comment must include this zero-storage footer (append to the body):
+
+  ---
+  *EngineIQ: this review used in-memory processing only. No source code was stored by EngineIQ.*
+
+- The platform must require **zero EngineIQ engineer action** to onboard a new client (fully self-serve).
+
+## Stack
+
+.NET 8 (API + Worker), PostgreSQL, Redis, RabbitMQ, Python 3.12 (reporting), Next.js (website + portal), Caddy (reverse proxy). Deployed via **Docker Compose** on **Hetzner**.
+
+## Current state
+
+Webhook enqueues to RabbitMQ (PostgreSQL idempotency on `X-GitHub-Delivery`); Worker runs ReviewOrchestrator (Claude + GitHub). Further product scope still to build (see `.cursor/rules/engineiq.mdc`).
+
+The same rules live in `.cursor/rules/engineiq.mdc` (always-on Cursor rule format).

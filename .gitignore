@@ -1,0 +1,23 @@
+# Secrets — never commit
+.env
+.env.local
+.env.*.local
+*.pem
+secrets/
+
+# .NET
+**/bin/
+**/obj/
+**/out/
+*.user
+*.suo
+.vs/
+
+# Node / Next
+**/node_modules/
+**/.next/
+**/out/
+
+# OS / tooling
+.DS_Store
+Thumbs.db
