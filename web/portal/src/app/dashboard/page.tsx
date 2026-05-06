@@ -49,51 +49,108 @@ export default function DashboardPage() {
     })) ?? [];
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-        <p className="text-slate-400">Last 30 days · UTC</p>
+    <div>
+      <div className="eq-pagehead">
+        <div>
+          <div
+            className="eq-text-xs eq-text-muted"
+            style={{ letterSpacing: "0.08em", textTransform: "uppercase" }}
+          >
+            Overview
+          </div>
+          <h1 className="eq-h2" style={{ marginTop: 10 }}>
+            Dashboard
+          </h1>
+          <p className="eq-text-sm eq-text-muted" style={{ margin: "10px 0 0" }}>
+            Last 30 days · UTC
+          </p>
+        </div>
       </div>
-      {err && <p className="text-red-400">{err}</p>}
+
+      {err && (
+        <div className="eq-card" style={{ borderColor: "rgba(239, 68, 68, 0.35)", padding: 14 }}>
+          <div className="eq-text-sm" style={{ color: "var(--eq-red)" }}>
+            {err}
+          </div>
+        </div>
+      )}
+
+      {!data && !err && (
+        <div className="eq-grid-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="eq-card">
+              <div className="eq-skeleton" style={{ height: 12, width: 120 }} />
+              <div className="eq-skeleton" style={{ height: 28, width: 80, marginTop: 12 }} />
+              <div className="eq-skeleton" style={{ height: 10, width: 220, marginTop: 12 }} />
+            </div>
+          ))}
+        </div>
+      )}
+
       {data && (
         <>
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-              <p className="text-sm text-slate-500">PRs reviewed</p>
-              <p className="text-2xl font-semibold text-teal-400">{data.prs_reviewed_in_period}</p>
+          <div className="eq-grid-3">
+            <div className="eq-card">
+              <div className="eq-text-xs eq-text-muted" style={{ letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                PRs reviewed
+              </div>
+              <div className="eq-text-2xl" style={{ marginTop: 12, fontWeight: 600, color: "var(--eq-accent-light)" }}>
+                {data.prs_reviewed_in_period}
+              </div>
             </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-              <p className="text-sm text-slate-500">Violations logged</p>
-              <p className="text-2xl font-semibold text-amber-300">{data.violations_in_period}</p>
+            <div className="eq-card">
+              <div className="eq-text-xs eq-text-muted" style={{ letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                Findings logged
+              </div>
+              <div className="eq-text-2xl" style={{ marginTop: 12, fontWeight: 600, color: "var(--eq-amber)" }}>
+                {data.violations_in_period}
+              </div>
             </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-              <p className="text-sm text-slate-500">Architecture drift score</p>
-              <p className="text-2xl font-semibold text-white">{data.architecture_drift_score}</p>
-              <p className="mt-1 text-xs text-slate-500">{data.architecture_drift_note}</p>
+            <div className="eq-card">
+              <div className="eq-text-xs eq-text-muted" style={{ letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                Architecture drift
+              </div>
+              <div className="eq-row" style={{ marginTop: 12, alignItems: "baseline" }}>
+                <div className="eq-text-2xl" style={{ fontWeight: 600 }}>
+                  {data.architecture_drift_score}
+                </div>
+                <span className="eq-badge eq-badge--grey">0–100</span>
+              </div>
+              <p className="eq-text-xs eq-text-dim" style={{ margin: "10px 0 0" }}>
+                {data.architecture_drift_note}
+              </p>
             </div>
           </div>
-          <div className="h-80 rounded-xl border border-slate-800 bg-slate-900/30 p-4">
-            <h2 className="mb-4 text-sm font-medium text-slate-400">Trend</h2>
-            <ResponsiveContainer width="100%" height="90%">
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                <XAxis dataKey="date" stroke="#94a3b8" fontSize={12} />
-                <YAxis stroke="#94a3b8" fontSize={12} />
-                <Tooltip
-                  contentStyle={{ background: "#0f172a", border: "1px solid #334155" }}
-                  labelStyle={{ color: "#e2e8f0" }}
-                />
-                <Legend />
-                <Line type="monotone" dataKey="prs" name="PRs" stroke="#14b8a6" dot={false} />
-                <Line
-                  type="monotone"
-                  dataKey="violations"
-                  name="Violations"
-                  stroke="#fbbf24"
-                  dot={false}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+
+          <div className="eq-card" style={{ marginTop: 16 }}>
+            <div className="eq-row" style={{ alignItems: "center" }}>
+              <div>
+                <div className="eq-text-xs eq-text-muted" style={{ letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                  Trend
+                </div>
+                <div className="eq-text-sm eq-text-muted" style={{ marginTop: 8 }}>
+                  PRs reviewed vs findings per day
+                </div>
+              </div>
+              <span className="eq-badge eq-badge--purple">30d</span>
+            </div>
+
+            <div style={{ height: 320, marginTop: 16 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(63,63,70,0.9)" />
+                  <XAxis dataKey="date" stroke="#A1A1AA" fontSize={12} />
+                  <YAxis stroke="#A1A1AA" fontSize={12} />
+                  <Tooltip
+                    contentStyle={{ background: "#111113", border: "1px solid #27272A" }}
+                    labelStyle={{ color: "#FAFAFA" }}
+                  />
+                  <Legend />
+                  <Line type="monotone" dataKey="prs" name="PRs" stroke="#8B5CF6" dot={false} />
+                  <Line type="monotone" dataKey="violations" name="Findings" stroke="#F59E0B" dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </>
       )}
