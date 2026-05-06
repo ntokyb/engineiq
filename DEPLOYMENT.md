@@ -208,7 +208,7 @@ Then `./deploy.sh` runs `docker compose build` before `up`. Requires **more RAM/
 
 ```bash
 cd /opt/engineiq   # repository root: docker-compose.yml + deploy.sh live here
-chmod +x deploy.sh scripts/verify-deployment.sh 2>/dev/null || true
+chmod +x deploy.sh scripts/verify-deployment.sh scripts/register-internal-demo-tenants.sh 2>/dev/null || true
 ./deploy.sh
 ```
 
@@ -263,26 +263,78 @@ Credentials: `ENGINEIQ_ADMIN_USERNAME` / `ENGINEIQ_ADMIN_PASSWORD` from `.env`.
 
 ---
 
-## 11. Onboarding the four organisations
+## 11. Tenant onboarding & GitHub installations
 
-Each row is **one EngineIQ tenant** = **one GitHub App installation** on that org.
+### 11.1 How real clients onboard (you never touch their GitHub)
 
-| # | GitHub org slug (`github_org` in API) | Suggested company display name | Owner email (unique per tenant in DB) |
-|---|--------------------------------------|--------------------------------|----------------------------------------|
-| 1 | `therecord` | The Record | ops+therecord@… |
-| 2 | `billable` | Billable | ops+billable@… |
-| 3 | `war-room` | War Room | ops+warroom@… |
-| 4 | `skillbay` | Skillbay | ops+skillbay@… |
+Production behaviour matches standard GitHub App SaaS:
+
+1. Customer registers (**marketing sign-up** or **`POST /api/v1/onboarding/register`** with **`dpa_accepted: true`**).
+2. EngineIQ creates **one tenant row**, emails **install URL** + **API key** (once).
+3. Customer clicks **Install GitHub App** and selects **their** organisation when GitHub prompts.
+4. GitHub sends **`installation`** events; EngineIQ binds **`git_hub_app_installation_id`** to **that tenant**.
+5. PR webhooks on repos covered by that installation resolve to **that tenant** only (`fn_resolve_tenant_by_installation`).
+
+No EngineIQ engineer needs access to the customer’s GitHub — installs are self-serve.
+
+### 11.2 Installation ID uniqueness (internal testing vs production)
+
+The database enforces a **unique index** on **`tenants.git_hub_app_installation_id`**.
+
+Consequences:
+
+| Scenario | Result |
+|----------|--------|
+| **Production clients** — each org installs the app once | Distinct installation IDs → **one tenant per customer org**. Correct forever. |
+| **Codist internal testing** — multiple tenant rows (four personas) but **one** GitHub user/account (e.g. personal **`ntokyb`**) with **one** installation ID | **Only one** tenant row may hold that **`git_hub_app_installation_id`**. That tenant receives **live webhook reviews** for repos under that installation. The **other** persona tenants remain valid for **portal / admin / support demos** (log in with each **`tenant_id` + `api_key`**) but **will not** receive PR events from that installation until they have **their own** install (e.g. separate GitHub org per product). |
+
+**Practical recommendation**
+
+- **Treat the four registrations below as permanent “demo clients”** for UX and dashboards; store **`tenant_id` / `api_key`** in **`scripts/demo-tenant-state.local.env`** (copy from **`scripts/demo-tenant-state.example.env`**, gitignored).
+- **Pick one** persona (or a dedicated **Codist** tenant) as the single webhook-linked row when all repos share **one** installation.
+- **Production-shaped split:** move each product under its **own GitHub organisation** so each org gets its **own** installation → four tenants, four installs, full realism.
+
+### 11.3 Codist internal demo tenants (“golden four”)
+
+Canonical personas for **marketing → onboarding → portal → admin/support** testing:
+
+| Persona | `company_name` | `email` (unique in DB) | `github_org` (stored slug) |
+|---------|----------------|-------------------------|----------------------------|
+| Mybillable | Mybillable | `hello@mybillable.co.za` | `mybillable` |
+| Therecord | Therecord | `hello@therecord.co.za` | `therecord` |
+| Skillbay | Skillbay | `hello@skillbay.co.za` | `skillbay` |
+| War Room | War Room | `technical@codist.co.za` | `warroom` |
+
+**Repeatable registration (same payloads every time):**
+
+```bash
+chmod +x scripts/register-internal-demo-tenants.sh
+ENGINEIQ_API_URL=https://api.engineiq.co.za ./scripts/register-internal-demo-tenants.sh
+```
+
+Then paste each JSON **`tenant_id`** and **`api_key`** into **`scripts/demo-tenant-state.local.env`** so operators always know which UUID exercises which persona.
+
+If you need a clean DB: delete conflicting tenant rows in Postgres first (emails above must remain unique per registration).
+
+### 11.4 Production-style onboarding (four separate organisations)
+
+Target shape when each brand has **its own GitHub org** (matches §2.1 checklist):
+
+| # | GitHub org slug (`github_org`) | Suggested company display name | Example operator email |
+|---|-------------------------------|--------------------------------|-------------------------|
+| 1 | `therecord` | The Record | `ops+therecord@yourdomain.co.za` |
+| 2 | `billable` | Billable | `ops+billable@yourdomain.co.za` |
+| 3 | `war-room` | War Room | `ops+warroom@yourdomain.co.za` |
+| 4 | `skillbay` | Skillbay | `ops+skillbay@yourdomain.co.za` |
 
 **Per org — repeat:**
 
-1. Open **`https://engineiq.co.za/sign-up`** (or call API below).
-2. Submit with **`dpa_accepted: true`**.
-3. Copy **`tenant_id`** and **`api_key`** from the response (and email if SendGrid configured).
-4. Click **Install GitHub App** in the email/page; choose **only that organisation** when GitHub prompts.
-5. After redirect to portal, each team uses **`https://app.engineiq.co.za/login`** with **their** tenant UUID + API key.
+1. Open **`https://engineiq.co.za/sign-up`** (or call **`POST /api/v1/onboarding/register`**).
+2. **`dpa_accepted: true`** required.
+3. Copy **`tenant_id`** + **`api_key`**; complete **Install GitHub App** for **that org only**.
+4. Portal login: **`https://app.engineiq.co.za/login`** with that tenant’s UUID + API key.
 
-**API equivalent:**
+**API equivalent (replace email/domain):**
 
 ```bash
 curl -sS -X POST "https://api.engineiq.co.za/api/v1/onboarding/register" \
@@ -296,7 +348,7 @@ curl -sS -X POST "https://api.engineiq.co.za/api/v1/onboarding/register" \
   }'
 ```
 
-Validate each org can open a test PR and receive a review comment (requires Worker + Anthropic + GitHub permissions).
+Validate each org can open a test PR and receive a review comment (Worker + Anthropic + GitHub permissions).
 
 ---
 
@@ -330,7 +382,8 @@ Validate each org can open a test PR and receive a review comment (requires Work
 - [ ] `curl https://api.engineiq.co.za/health` returns JSON
 - [ ] GitHub App webhook delivered once (check API logs)
 - [ ] All compose services healthy: `docker compose ps`
-- [ ] Four tenants registered; four installs completed; test PR reviewed on at least one repo
+- [ ] Demo tenants registered (**§11.3**) or four production org tenants (**§11.4**) with credentials captured in **`demo-tenant-state.local.env`** (operators); understand **§11.2** if one GitHub installation feeds multiple personas
+- [ ] Test PR reviewed on at least one repo (installation-linked tenant per **§11.2**)
 - [ ] Operator can SSH tunnel to admin and list tenants
 - [ ] `.env` backed up to a **secrets vault** (not git)
 

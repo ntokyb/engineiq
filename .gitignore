@@ -5,6 +5,9 @@
 *.pem
 secrets/
 
+# Operator-local demo tenant IDs/API keys (from onboarding/register)
+scripts/demo-tenant-state.local.env
+
 # .NET
 **/bin/
 **/obj/
