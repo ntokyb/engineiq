@@ -41,7 +41,7 @@ Architecture-aware **AI pull request review** for teams standardising on **Anthr
 
 1. Follow **[DEPLOYMENT.md](./DEPLOYMENT.md)** end-to-end (DNS → Hetzner → `.env` → `./deploy.sh`).
 2. Configure **one GitHub App** with webhook `https://api.engineiq.co.za/webhooks/github`.
-3. Register tenants: **production-shaped** — one per GitHub org (**therecord**, **billable**, **war-room**, **skillbay**); **Codist internal demos** — repeatable **`scripts/register-internal-demo-tenants.sh`** + capture keys in **`scripts/demo-tenant-state.local.env`** (see **DEPLOYMENT.md §11** — unique **`installation_id`** per tenant).
+3. Register tenants: **production-shaped** — one per GitHub org (**therecord**, **billable**, **war-room**, **skillbay**); **Codist golden four** — bootstrap via **`scripts/register-internal-demo-tenants.sh`** only on greenfield DBs; treat those tenant rows as **permanent** (ongoing PRs); capture keys in **`scripts/demo-tenant-state.local.env`** (see **DEPLOYMENT.md §11** — unique **`installation_id`** per tenant).
 4. Run **`scripts/verify-deployment.sh`** from any machine once DNS/TLS are green.
 
 **Images:** push to GHCR via GitHub Actions ([`.github/workflows/publish-images.yml`](./.github/workflows/publish-images.yml)) or set `SKIP_PULL=1` and build on the server (see DEPLOYMENT).

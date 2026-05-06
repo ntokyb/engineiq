@@ -59,3 +59,4 @@ When adding services, prefer this stack unless there is an explicit ADR to diver
 - Match existing naming and layout under `src/`.
 - Do not add markdown documentation files unless the user asks.
 - When introducing DB access, default to `tenant_id` in the same query as the primary filter and document RLS expectations in code comments only where non-obvious.
+- **Codist golden-four tenants** (`hello@mybillable.co.za`, `hello@therecord.co.za`, `hello@skillbay.co.za`, `technical@codist.co.za`): treat as **long-lived integration fixtures** tied to active repos and continuous PRs. Documentation and ops flows must **preserve** those tenant rows (backups, restores); avoid implying casual deletes or “clean slate” scripts that drop them. See **`DEPLOYMENT.md` §11.3**.

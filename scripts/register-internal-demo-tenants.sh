@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Register Codist "golden four" demo tenants against ENGINEIQ_API_URL (default: production API).
-# Use for portal/admin/support testing — treat responses like customer onboarding artifacts.
+# Bootstrap Codist "golden four" tenants (fixed emails in DEPLOYMENT.md §11.3).
+#
+# Long-lived environments: KEEP existing tenant rows — this script only for greenfield DBs.
+# Re-running fails if contact_email already exists.
 #
 # IMPORTANT: git_hub_app_installation_id is UNIQUE per tenant. One GitHub App installation maps to
 # at most one tenant row. See DEPLOYMENT.md §11.

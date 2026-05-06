@@ -296,7 +296,7 @@ Consequences:
 
 ### 11.3 Codist internal demo tenants (“golden four”)
 
-Canonical personas for **marketing → onboarding → portal → admin/support** testing:
+These four **`contact_email`** values identify **standing Codist product/integration tenants**, not disposable QA fixtures:
 
 | Persona | `company_name` | `email` (unique in DB) | `github_org` (stored slug) |
 |---------|----------------|-------------------------|----------------------------|
@@ -305,16 +305,19 @@ Canonical personas for **marketing → onboarding → portal → admin/support**
 | Skillbay | Skillbay | `hello@skillbay.co.za` | `skillbay` |
 | War Room | War Room | `technical@codist.co.za` | `warroom` |
 
-**Repeatable registration (same payloads every time):**
+Repositories under active development receive PRs continuously; portal/admin/support features **must keep behaving for these UUIDs** as the platform grows.
+
+**Operational posture**
+
+- **Preserve rows** across releases (included in normal Postgres backups). Do **not** bulk-delete these tenants when “cleaning” data unless you are deliberately resetting an entire environment and will recreate them immediately after.
+- **Prefer suspension over deletion:** internal **`Suspended`** tenant blocks new webhook enqueue without destroying onboarding/API-key continuity — restore when testing resumes.
+- **Credentials:** mirror **`tenant_id`** + **`api_key`** into **`scripts/demo-tenant-state.local.env`** (copy from **`demo-tenant-state.example.env`**) so everyone aligns portal demos with the same personas **years later**.
+- **Bootstrap-only registration script:** **`scripts/register-internal-demo-tenants.sh`** matches onboarding payloads for **greenfield** DBs; **it fails if those emails already exist**. Long-lived environments rely on **migration / backup**, not re-registration churn.
 
 ```bash
 chmod +x scripts/register-internal-demo-tenants.sh
 ENGINEIQ_API_URL=https://api.engineiq.co.za ./scripts/register-internal-demo-tenants.sh
 ```
-
-Then paste each JSON **`tenant_id`** and **`api_key`** into **`scripts/demo-tenant-state.local.env`** so operators always know which UUID exercises which persona.
-
-If you need a clean DB: delete conflicting tenant rows in Postgres first (emails above must remain unique per registration).
 
 ### 11.4 Production-style onboarding (four separate organisations)
 
@@ -359,7 +362,7 @@ Validate each org can open a test PR and receive a review comment (Worker + Anth
 | Logs API | `docker compose logs -f engineiq-api` |
 | Logs worker | `docker compose logs -f engineiq-worker` |
 | Restart stack | `docker compose --profile platform restart` |
-| DB backup | `docker compose exec postgres pg_dump -U engineiq engineiq > backup.sql` |
+| DB backup | `docker compose exec postgres pg_dump -U engineiq engineiq > backup.sql` (golden-four tenants in **`§11.3`** must survive restores — continuous PR traffic) |
 | Update deploy | `git pull && ./deploy.sh` |
 
 ---
