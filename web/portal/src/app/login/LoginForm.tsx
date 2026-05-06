@@ -61,7 +61,7 @@ export function LoginForm() {
 
       saveSession(t, k);
       pushToast({ kind: "success", title: "Signed in", message: "Welcome to your workspace." });
-      router.push("/dashboard");
+      router.push("/overview");
     } catch {
       setErr("Network error — cannot reach the EngineIQ API.");
       pushToast({ kind: "error", title: "Network error", message: "Cannot reach the EngineIQ API." });

@@ -280,6 +280,24 @@ public sealed class TenantRepository : ITenantRepository
             driftNote);
     }
 
+    public async Task<IReadOnlyList<TenantRepositoryRow>> ListRepositoriesAsync(
+        Guid tenantId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await _factory.CreateDbContextAsync(cancellationToken);
+        await db.SetCurrentTenantAsync(tenantId, cancellationToken);
+
+        var exists = await db.Tenants.AsNoTracking().AnyAsync(t => t.Id == tenantId, cancellationToken);
+        if (!exists)
+            return Array.Empty<TenantRepositoryRow>();
+
+        return await db.Repositories.AsNoTracking()
+            .Where(r => r.TenantId == tenantId)
+            .OrderBy(r => r.FullName)
+            .Select(r => new TenantRepositoryRow(r.Id, r.FullName, r.Jobs.Count))
+            .ToListAsync(cancellationToken);
+    }
+
     private static bool IsUniqueViolation(DbUpdateException ex) =>
         ex.InnerException is PostgresException pg && pg.SqlState == PostgresErrorCodes.UniqueViolation;
 

@@ -1,6 +1,8 @@
 using EngineIQ.Domain.Audit;
 using EngineIQ.Domain.Interfaces;
+using EngineIQ.Domain.Jobs;
 using EngineIQ.Domain.Persistence;
+using EngineIQ.Domain.Tenants;
 using EngineIQ.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -191,6 +193,101 @@ public sealed class JobRepository : IJobRepository
 
         return (rows, total);
     }
+
+    public async Task<(IReadOnlyList<TenantPrJobRow> Items, int TotalCount)> ListTenantJobsAsync(
+        Guid tenantId,
+        string? status,
+        int skip,
+        int take,
+        CancellationToken cancellationToken = default)
+    {
+        skip = Math.Max(0, skip);
+        take = Math.Clamp(take, 1, 500);
+
+        await using var db = await _factory.CreateDbContextAsync(cancellationToken);
+        await db.SetCurrentTenantAsync(tenantId, cancellationToken);
+
+        var q = db.PrReviewJobs.AsNoTracking().Where(j => j.TenantId == tenantId);
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            var s = status.Trim();
+            q = q.Where(j => j.Status == s);
+        }
+
+        var total = await q.CountAsync(cancellationToken);
+        var jobs = await q
+            .OrderByDescending(j => j.CreatedAt)
+            .Skip(skip)
+            .Take(take)
+            .Include(j => j.Repository)
+            .ToListAsync(cancellationToken);
+
+        var rows = new List<TenantPrJobRow>(jobs.Count);
+        foreach (var j in jobs)
+        {
+            if (j.Repository is null)
+                continue;
+            rows.Add(ToTenantJobRow(j, j.Repository.FullName));
+        }
+
+        return (rows, total);
+    }
+
+    public async Task<TenantPrJobRow?> GetTenantJobAsync(Guid tenantId, Guid jobId, CancellationToken cancellationToken = default)
+    {
+        await using var db = await _factory.CreateDbContextAsync(cancellationToken);
+        await db.SetCurrentTenantAsync(tenantId, cancellationToken);
+        var j = await db.PrReviewJobs.AsNoTracking()
+            .Include(x => x.Repository)
+            .FirstOrDefaultAsync(x => x.TenantId == tenantId && x.Id == jobId, cancellationToken);
+        if (j?.Repository is null)
+            return null;
+        return ToTenantJobRow(j, j.Repository.FullName);
+    }
+
+    public async Task<TenantUsageSummary?> GetTenantUsageSummaryAsync(
+        Guid tenantId,
+        int days,
+        CancellationToken cancellationToken = default)
+    {
+        days = Math.Clamp(days, 1, 366);
+        var cutoff = DateTimeOffset.UtcNow.AddDays(-days);
+
+        await using var db = await _factory.CreateDbContextAsync(cancellationToken);
+        await db.SetCurrentTenantAsync(tenantId, cancellationToken);
+
+        var exists = await db.Tenants.AsNoTracking().AnyAsync(t => t.Id == tenantId, cancellationToken);
+        if (!exists)
+            return null;
+
+        var q = db.PrReviewJobs.AsNoTracking()
+            .Where(j =>
+                j.TenantId == tenantId
+                && j.Status == ReviewJobStatuses.Completed
+                && j.CompletedAt != null
+                && j.CompletedAt >= cutoff);
+
+        var completed = await q.CountAsync(cancellationToken);
+        var tokensIn = await q.SumAsync(j => (long)j.InputTokens, cancellationToken);
+        var tokensOut = await q.SumAsync(j => (long)j.OutputTokens, cancellationToken);
+        var cost = await q.SumAsync(j => j.EstimatedCostZar ?? 0m, cancellationToken);
+
+        return new TenantUsageSummary(days, completed, tokensIn, tokensOut, cost);
+    }
+
+    private static TenantPrJobRow ToTenantJobRow(PrReviewJob j, string repositoryFullName) =>
+        new(
+            j.Id,
+            repositoryFullName,
+            j.PrNumber,
+            j.Status,
+            j.CreatedAt,
+            j.CompletedAt,
+            j.DurationMs,
+            j.FindingsCount,
+            j.InputTokens,
+            j.OutputTokens,
+            j.EstimatedCostZar);
 
     public async Task MarkJobFailedAsync(Guid tenantId, Guid jobId, long? durationMs, CancellationToken cancellationToken = default)
     {

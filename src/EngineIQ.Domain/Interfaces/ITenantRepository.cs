@@ -23,4 +23,6 @@ public interface ITenantRepository
     Task<string?> GetConfigYamlAsync(Guid tenantId, CancellationToken cancellationToken = default);
 
     Task<TenantDashboardAnalytics?> GetDashboardAnalyticsAsync(Guid tenantId, int days, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<TenantRepositoryRow>> ListRepositoriesAsync(Guid tenantId, CancellationToken cancellationToken = default);
 }

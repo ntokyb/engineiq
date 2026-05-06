@@ -1,4 +1,6 @@
 using EngineIQ.Domain.Audit;
+using EngineIQ.Domain.Jobs;
+using EngineIQ.Domain.Tenants;
 
 namespace EngineIQ.Domain.Interfaces;
 
@@ -35,6 +37,21 @@ public interface IJobRepository
         Guid tenantId,
         int skip,
         int take,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>All jobs for tenant portal (queued/processing/completed/failed). Optional status filter.</summary>
+    Task<(IReadOnlyList<TenantPrJobRow> Items, int TotalCount)> ListTenantJobsAsync(
+        Guid tenantId,
+        string? status,
+        int skip,
+        int take,
+        CancellationToken cancellationToken = default);
+
+    Task<TenantPrJobRow?> GetTenantJobAsync(Guid tenantId, Guid jobId, CancellationToken cancellationToken = default);
+
+    Task<TenantUsageSummary?> GetTenantUsageSummaryAsync(
+        Guid tenantId,
+        int days,
         CancellationToken cancellationToken = default);
 
     Task MarkJobFailedAsync(Guid tenantId, Guid jobId, long? durationMs, CancellationToken cancellationToken = default);

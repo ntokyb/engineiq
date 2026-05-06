@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using EngineIQ.API.Validation;
 using EngineIQ.Domain.Interfaces;
+using EngineIQ.Domain.Jobs;
 using EngineIQ.Domain.Tenants;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
@@ -83,6 +84,69 @@ public sealed class TenantController : ControllerBase
             a.ArchitectureDriftNote));
     }
 
+    [HttpGet("jobs")]
+    public async Task<ActionResult<TenantJobsPageResponse>> Jobs(
+        Guid id,
+        [FromQuery] string? status,
+        [FromQuery] int skip = 0,
+        [FromQuery] int take = 50,
+        CancellationToken cancellationToken = default)
+    {
+        if (await _tenants.GetAccountSnapshotAsync(id, cancellationToken) is null)
+            return NotFound();
+
+        var (items, total) = await _jobs.ListTenantJobsAsync(id, status, skip, take, cancellationToken);
+        return Ok(new TenantJobsPageResponse(
+            total,
+            items.Select(MapJobRow).ToList()));
+    }
+
+    [HttpGet("jobs/{jobId:guid}")]
+    public async Task<ActionResult<TenantJobRowResponse>> JobDetail(
+        Guid id,
+        Guid jobId,
+        CancellationToken cancellationToken = default)
+    {
+        if (await _tenants.GetAccountSnapshotAsync(id, cancellationToken) is null)
+            return NotFound();
+
+        var row = await _jobs.GetTenantJobAsync(id, jobId, cancellationToken);
+        if (row is null)
+            return NotFound();
+
+        return Ok(MapJobRow(row));
+    }
+
+    [HttpGet("repositories")]
+    public async Task<ActionResult<IReadOnlyList<TenantRepositoryRowResponse>>> Repositories(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        if (await _tenants.GetAccountSnapshotAsync(id, cancellationToken) is null)
+            return NotFound();
+
+        var rows = await _tenants.ListRepositoriesAsync(id, cancellationToken);
+        return Ok(rows.Select(r => new TenantRepositoryRowResponse(r.Id, r.FullName, r.JobCount)).ToList());
+    }
+
+    [HttpGet("usage")]
+    public async Task<ActionResult<TenantUsageResponse>> Usage(
+        Guid id,
+        [FromQuery] int days = 30,
+        CancellationToken cancellationToken = default)
+    {
+        var summary = await _jobs.GetTenantUsageSummaryAsync(id, days, cancellationToken);
+        if (summary is null)
+            return NotFound();
+
+        return Ok(new TenantUsageResponse(
+            summary.Days,
+            summary.CompletedReviews,
+            summary.TotalInputTokens,
+            summary.TotalOutputTokens,
+            summary.TotalEstimatedCostZar));
+    }
+
     [HttpGet("audit")]
     public async Task<ActionResult<AuditLogPageResponse>> Audit(
         Guid id,
@@ -160,6 +224,49 @@ public sealed class TenantController : ControllerBase
         await _tenants.UpdateConfigYamlAsync(id, yaml, cancellationToken);
         return Ok(new ConfigValidationResponse(true, Array.Empty<string>()));
     }
+
+    public sealed record TenantJobRowResponse(
+        [property: JsonPropertyName("job_id")] Guid JobId,
+        [property: JsonPropertyName("repository_full_name")] string RepositoryFullName,
+        [property: JsonPropertyName("pr_number")] int PrNumber,
+        [property: JsonPropertyName("status")] string Status,
+        [property: JsonPropertyName("created_at")] DateTimeOffset CreatedAt,
+        [property: JsonPropertyName("completed_at")] DateTimeOffset? CompletedAt,
+        [property: JsonPropertyName("duration_ms")] long? DurationMs,
+        [property: JsonPropertyName("findings_count")] int FindingsCount,
+        [property: JsonPropertyName("input_tokens")] int InputTokens,
+        [property: JsonPropertyName("output_tokens")] int OutputTokens,
+        [property: JsonPropertyName("estimated_cost_zar")] decimal? EstimatedCostZar);
+
+    public sealed record TenantJobsPageResponse(
+        [property: JsonPropertyName("total_count")] int TotalCount,
+        [property: JsonPropertyName("items")] IReadOnlyList<TenantJobRowResponse> Items);
+
+    public sealed record TenantRepositoryRowResponse(
+        [property: JsonPropertyName("id")] Guid Id,
+        [property: JsonPropertyName("full_name")] string FullName,
+        [property: JsonPropertyName("job_count")] int JobCount);
+
+    public sealed record TenantUsageResponse(
+        [property: JsonPropertyName("days")] int Days,
+        [property: JsonPropertyName("completed_reviews")] int CompletedReviews,
+        [property: JsonPropertyName("total_input_tokens")] long TotalInputTokens,
+        [property: JsonPropertyName("total_output_tokens")] long TotalOutputTokens,
+        [property: JsonPropertyName("total_estimated_cost_zar")] decimal TotalEstimatedCostZar);
+
+    private static TenantJobRowResponse MapJobRow(TenantPrJobRow r) =>
+        new(
+            r.JobId,
+            r.RepositoryFullName,
+            r.PrNumber,
+            r.Status,
+            r.CreatedAt,
+            r.CompletedAt,
+            r.DurationMs,
+            r.FindingsCount,
+            r.InputTokens,
+            r.OutputTokens,
+            r.EstimatedCostZar);
 
     public sealed record TenantStatusResponse(
         [property: JsonPropertyName("onboarding_status")] string OnboardingStatus,

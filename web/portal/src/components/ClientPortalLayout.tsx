@@ -7,8 +7,11 @@ import { clearSession, loadSession } from "@/lib/auth";
 import { tenantGet } from "@/lib/api";
 
 const links = [
-  { href: "/dashboard", label: "Dashboard" },
+  { href: "/overview", label: "Overview" },
+  { href: "/pull-requests", label: "Pull requests" },
   { href: "/findings", label: "Findings" },
+  { href: "/repositories", label: "Repositories" },
+  { href: "/usage", label: "Usage" },
   { href: "/settings", label: "Settings" },
   { href: "/reports", label: "Reports" },
 ];
@@ -69,7 +72,7 @@ export function ClientPortalLayout({ children }: { children: React.ReactNode }) 
     <div className="eq-app">
       <aside className="eq-sidebar" aria-label="Sidebar navigation">
         <div className="eq-sidebar__logo">
-          <Link href="/dashboard" className="eq-brand" aria-label="EngineIQ dashboard">
+          <Link href="/overview" className="eq-brand" aria-label="EngineIQ overview">
             <span className="eq-brand__mark" aria-hidden="true" />
             <span>EngineIQ</span>
           </Link>
