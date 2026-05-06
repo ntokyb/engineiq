@@ -126,15 +126,22 @@ export default function SignUpPage() {
 
                 <div>
                   <label className="eq-text-sm eq-text-muted">Work email *</label>
-                  <input
-                    className="eq-input"
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="cto@company.co.za"
-                    aria-label="Work email"
-                  />
+                  <div className="eq-input-wrap">
+                    <input
+                      className="eq-input"
+                      type="email"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="cto@company.co.za"
+                      aria-label="Work email"
+                      aria-busy={loading}
+                      style={{ paddingRight: loading ? 40 : undefined }}
+                    />
+                    {loading ? (
+                      <span className="eq-spinner" role="status" aria-label="Submitting" />
+                    ) : null}
+                  </div>
                 </div>
 
                 <div>

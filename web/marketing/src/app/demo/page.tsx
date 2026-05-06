@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Book a demo — EngineIQ",
@@ -6,25 +7,34 @@ export const metadata: Metadata = {
 
 export default function DemoPage() {
   return (
-    <div className="mx-auto max-w-xl px-4 py-16">
-      <h1 className="text-3xl font-bold text-white">Book a demo</h1>
-      <p className="mt-4 text-slate-400">
-        For Enterprise procurement, security questionnaires, or a walkthrough with your CTO —
-        reach out and we&apos;ll schedule a session.
-      </p>
-      <a
-        href="mailto:hello@engineiq.co.za?subject=EngineIQ%20demo%20request"
-        className="mt-8 inline-block rounded-xl bg-teal-500 px-6 py-3 font-semibold text-slate-950 transition hover:bg-teal-400"
-      >
-        Email hello@engineiq.co.za
-      </a>
-      <p className="mt-6 text-sm text-slate-500">
-        Prefer self-serve? Most teams go live in under 10 minutes via{" "}
-        <a href="/sign-up" className="text-teal-400 hover:underline">
-          Sign up
-        </a>
-        .
-      </p>
+    <div className="eq-section">
+      <div className="eq-container" style={{ maxWidth: 560 }}>
+        <h1 className="eq-h1" style={{ fontSize: "clamp(28px, 4vw, 40px)" }}>
+          Book a demo
+        </h1>
+        <p className="eq-text-md eq-text-muted" style={{ marginTop: 16 }}>
+          For Enterprise procurement, security questionnaires, or a walkthrough with your CTO — reach out and
+          we&apos;ll schedule a session.
+        </p>
+        <p className="eq-text-md" style={{ marginTop: 24 }}>
+          Email{" "}
+          <a href="mailto:hello@engineiq.co.za?subject=EngineIQ%20demo%20request" style={{ color: "var(--eq-accent-light)" }}>
+            hello@engineiq.co.za
+          </a>
+        </p>
+        <div style={{ marginTop: 28 }}>
+          <a href="mailto:hello@engineiq.co.za?subject=EngineIQ%20demo%20request" className="eq-btn eq-btn--primary">
+            Email hello@engineiq.co.za
+          </a>
+        </div>
+        <p className="eq-text-sm eq-text-dim" style={{ marginTop: 24 }}>
+          Prefer self-serve? Most teams go live in under 10 minutes via{" "}
+          <Link href="/sign-up" style={{ color: "var(--eq-accent-light)" }}>
+            Sign up
+          </Link>
+          .
+        </p>
+      </div>
     </div>
   );
 }

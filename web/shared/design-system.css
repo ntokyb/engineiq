@@ -438,6 +438,47 @@ a {
   margin-bottom: 18px;
 }
 
+/* Inline loading indicator for forms */
+.eq-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--eq-border-light);
+  border-top-color: var(--eq-accent-light);
+  border-radius: 50%;
+  animation: eq-spin 700ms linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes eq-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .eq-spinner {
+    animation: none;
+    border-top-color: var(--eq-border-light);
+    opacity: 0.6;
+  }
+}
+
+.eq-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.eq-input-wrap .eq-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.eq-input-wrap .eq-spinner {
+  position: absolute;
+  right: 12px;
+}
+
 .eq-toasts {
   position: fixed;
   right: 16px;

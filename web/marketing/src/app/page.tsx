@@ -12,7 +12,7 @@ export default function HomePage() {
             <div className="eq-pill" role="status" aria-label="Production status">
               <span className="eq-dot" aria-hidden="true" />
               <span>AI-powered code review</span>
-              <span className="eq-text-dim">Now in production · engineiq.co.za</span>
+              <span className="eq-text-dim">Now in production · Try for free</span>
             </div>
 
             <h1 className="eq-h1" style={{ marginTop: 18, maxWidth: 720 }}>
@@ -44,7 +44,7 @@ export default function HomePage() {
               <div className="eq-row">
                 <div className="eq-text-sm eq-text-muted">Trusted by engineering teams on</div>
                 <div className="eq-text-sm eq-text-dim" style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-                  <span className="eq-badge eq-badge--grey">GitHub</span>
+                  <span className="eq-badge eq-badge--grey">Vercel</span>
                   <span className="eq-badge eq-badge--grey">.NET</span>
                   <span className="eq-badge eq-badge--grey">Next.js</span>
                   <span className="eq-badge eq-badge--grey">PostgreSQL</span>

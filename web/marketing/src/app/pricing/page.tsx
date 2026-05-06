@@ -13,6 +13,7 @@ const tiers = [
     desc: "Small teams getting consistent PR reviews.",
     features: ["Up to 15 developers", "Core standards YAML", "GitHub App + portal", "Email support"],
     cta: "Sign up",
+    href: "/sign-up",
     highlight: false,
   },
   {
@@ -27,6 +28,7 @@ const tiers = [
       "Slack / webhook hooks (roadmap)",
     ],
     cta: "Sign up",
+    href: "/sign-up",
     highlight: true,
   },
   {
@@ -36,55 +38,77 @@ const tiers = [
     desc: "Dedicated support, SSO, and custom policies.",
     features: ["Unlimited seats (fair use)", "Custom contracts", "VPC / private networking options", "Dedicated CSM"],
     cta: "Book a demo",
+    href: "/demo",
     highlight: false,
-    demo: true,
   },
 ];
 
 export default function PricingPage() {
   return (
-    <div className="mx-auto max-w-6xl px-4 py-16">
-      <h1 className="text-center text-3xl font-bold text-white">Simple pricing in Rand</h1>
-      <p className="mx-auto mt-4 max-w-2xl text-center text-slate-400">
-        VAT may apply. Annual billing available on request. All tiers include POPIA-aligned
-        processing and zero source code persistence.
-      </p>
-      <div className="mt-14 grid gap-8 md:grid-cols-3">
-        {tiers.map((t) => (
-          <div
-            key={t.name}
-            className={`flex flex-col rounded-2xl border p-8 ${
-              t.highlight
-                ? "border-teal-500/60 bg-teal-500/5 glow-border"
-                : "border-slate-800 bg-slate-900/30"
-            }`}
-          >
-            <h2 className="text-lg font-semibold text-teal-300">{t.name}</h2>
-            <p className="mt-2 text-sm text-slate-400">{t.desc}</p>
-            <p className="mt-6 text-3xl font-bold text-white">
-              {t.price}
-              <span className="text-base font-normal text-slate-500">{t.period}</span>
-            </p>
-            <ul className="mt-6 flex-1 space-y-3 text-sm text-slate-300">
-              {t.features.map((f) => (
-                <li key={f} className="flex gap-2">
-                  <span className="text-teal-400">✓</span>
-                  {f}
-                </li>
-              ))}
-            </ul>
-            <Link
-              href={t.demo ? "/demo" : "/sign-up"}
-              className={`mt-8 block rounded-xl py-3 text-center text-sm font-semibold transition ${
-                t.highlight
-                  ? "bg-teal-500 text-slate-950 hover:bg-teal-400"
-                  : "border border-slate-600 text-white hover:border-teal-500/50"
-              }`}
+    <div className="eq-section">
+      <div className="eq-container">
+        <h1 className="eq-h1" style={{ fontSize: "clamp(28px, 4vw, 40px)" }}>
+          Simple pricing in Rand
+        </h1>
+        <p className="eq-text-md eq-text-muted" style={{ marginTop: 16, maxWidth: 640 }}>
+          VAT may apply. Annual billing available on request. All tiers include POPIA-aligned processing and zero source
+          code persistence.
+        </p>
+
+        <div className="eq-grid-3" style={{ marginTop: 40 }}>
+          {tiers.map((t) => (
+            <div
+              key={t.name}
+              className="eq-card"
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                ...(t.highlight
+                  ? {
+                      borderColor: "rgba(124, 58, 237, 0.45)",
+                      boxShadow: "0 0 0 1px var(--eq-accent-glow)",
+                    }
+                  : {}),
+              }}
             >
-              {t.cta}
-            </Link>
-          </div>
-        ))}
+              <div className="eq-row" style={{ justifyContent: "flex-start", gap: 10 }}>
+                <h2 className="eq-h3" style={{ color: "var(--eq-accent-light)" }}>
+                  {t.name}
+                </h2>
+                {t.highlight ? (
+                  <span className="eq-badge eq-badge--purple">Most popular</span>
+                ) : null}
+              </div>
+              <p className="eq-text-sm eq-text-muted" style={{ marginTop: 10 }}>
+                {t.desc}
+              </p>
+              <p className="eq-text-xl" style={{ marginTop: 20, fontWeight: 600 }}>
+                {t.price}
+                <span className="eq-text-sm eq-text-dim" style={{ fontWeight: 400 }}>
+                  {t.period}
+                </span>
+              </p>
+              <ul
+                className="eq-text-sm eq-text-muted"
+                style={{ margin: "20px 0 0", padding: 0, listStyle: "none", display: "grid", gap: 12, flex: 1 }}
+              >
+                {t.features.map((f) => (
+                  <li key={f} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                    <span style={{ color: "var(--eq-green)", flexShrink: 0 }} aria-hidden="true">
+                      ✓
+                    </span>
+                    <span>{f}</span>
+                  </li>
+                ))}
+              </ul>
+              <div style={{ marginTop: 22 }}>
+                <Link href={t.href} className={t.highlight ? "eq-btn eq-btn--primary" : "eq-btn eq-btn--secondary"} style={{ width: "100%", justifyContent: "center" }}>
+                  {t.cta}
+                </Link>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
