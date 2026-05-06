@@ -42,7 +42,7 @@ fi
 
 docker compose --profile migration run --rm engineiq-migrator || on_fail "database migrations"
 
-docker compose --profile platform up -d --remove-orphans || on_fail "docker compose up"
+docker compose --profile platform up -d --remove-orphans || on_fail "docker compose --profile platform up -d"
 
 echo "Waiting for API container health…"
 for _ in $(seq 1 40); do
