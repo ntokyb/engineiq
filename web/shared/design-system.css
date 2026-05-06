@@ -157,6 +157,39 @@ a {
   gap: 16px;
 }
 
+/* Side-by-side blocks that must stack on phones (trust strip, bottom CTA). */
+@media (max-width: 720px) {
+  .eq-row--stack-md {
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+
+  .eq-row--stack-md > * {
+    min-width: 0 !important;
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .eq-cta-row--full-sm {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .eq-cta-row--full-sm > .eq-btn,
+  .eq-cta-row--full-sm > a.eq-btn {
+    width: 100%;
+    justify-content: center;
+    box-sizing: border-box;
+  }
+}
+
+.eq-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .eq-grid-2 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -586,8 +619,8 @@ a {
 }
 
 .eq-btn {
-  height: 36px;
-  padding: 0 16px;
+  min-height: 36px;
+  padding: 8px 16px;
   border-radius: var(--radius-sm);
   font-size: 14px;
   font-weight: 500;
@@ -702,6 +735,11 @@ a {
   padding: 14px 16px;
   font-size: 14px;
   border-bottom: 1px solid rgba(39, 39, 42, 0.5);
+  vertical-align: top;
+}
+
+.eq-table tbody td:last-child {
+  word-break: break-word;
 }
 .eq-table tbody tr:hover {
   background: var(--eq-card-hover);

@@ -216,8 +216,8 @@ export default function HomePage() {
         <div className="eq-container">
           <div className="eq-divider" />
           <div style={{ marginTop: 56 }} className="eq-card">
-            <div className="eq-row" style={{ alignItems: "flex-start" }}>
-              <div>
+            <div className="eq-row eq-row--stack-md" style={{ alignItems: "flex-start", gap: 24 }}>
+              <div style={{ flex: "1 1 280px", minWidth: 0 }}>
                 <div className="eq-text-xs eq-text-muted" style={{ letterSpacing: "0.08em", textTransform: "uppercase" }}>
                   Trust / security
                 </div>
@@ -228,7 +228,7 @@ export default function HomePage() {
                   EngineIQ processes diffs in memory. No source code is stored. Findings metadata only is retained
                   for your dashboard and audit trail.
                 </p>
-                <div className="eq-cta-row" style={{ marginTop: 16 }}>
+                <div className="eq-cta-row eq-cta-row--full-sm" style={{ marginTop: 16 }}>
                   <Link href="/security" className="eq-btn eq-btn--secondary">
                     Read the security model
                   </Link>
@@ -237,7 +237,7 @@ export default function HomePage() {
                   </a>
                 </div>
               </div>
-              <div style={{ minWidth: 280 }}>
+              <div className="eq-table-wrap" style={{ flex: "1 1 260px", minWidth: 0 }}>
                 <table className="eq-table" aria-label="Trust checklist">
                   <thead>
                     <tr>
@@ -268,14 +268,14 @@ export default function HomePage() {
       <section className="eq-section" style={{ paddingTop: 0 }}>
         <div className="eq-container">
           <div className="eq-divider" />
-          <div className="eq-row" style={{ padding: "44px 0" }}>
-            <div>
+          <div className="eq-row eq-row--stack-md" style={{ padding: "44px 0", gap: 20, alignItems: "flex-start" }}>
+            <div style={{ minWidth: 0 }}>
               <h2 className="eq-h2">Start reviewing in 60 seconds.</h2>
               <p className="eq-text-md eq-text-muted" style={{ margin: "10px 0 0" }}>
                 CTO-ready onboarding. No engineer involvement required.
               </p>
             </div>
-            <div className="eq-cta-row" style={{ marginTop: 0 }}>
+            <div className="eq-cta-row eq-cta-row--full-sm" style={{ marginTop: 0 }}>
               <Link href="/sign-up" className="eq-btn eq-btn--primary">
                 Install GitHub App →
               </Link>
