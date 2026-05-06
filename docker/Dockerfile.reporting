@@ -15,5 +15,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY reporting/crontab /app/crontab
 COPY reporting/run_report_job.py /app/run_report_job.py
 
+# On Windows checkouts, cron files can be CRLF; supercronic will then try to exec "/usr/local/bin/python\r".
+RUN sed -i 's/\r$//' /app/crontab
+
 ENV ENGINEIQ_API_BASE_URL=http://engineiq-api:5000
-CMD ["supercronic", "/app/crontab"]
+# Run under a shell so supercronic is not PID 1 (avoids fork/exec failures observed when it is PID 1).
+CMD ["sh", "-lc", "/usr/local/bin/supercronic /app/crontab"]

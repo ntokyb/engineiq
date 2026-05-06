@@ -183,9 +183,8 @@ services:
     restart: unless-stopped
     environment:
       ENGINEIQ_API_BASE_URL: http://engineiq-api:5000
-    depends_on:
-      engineiq-api:
-        condition: service_healthy
+    # Do not hard-depend on API health: the job can retry if API is temporarily unavailable,
+    # and this lets operators start/restart reporting in isolation.
 
   engineiq-migrator:
     profiles: [migration]
