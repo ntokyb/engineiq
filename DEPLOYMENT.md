@@ -208,7 +208,7 @@ Then `./deploy.sh` runs `docker compose build` before `up`. Requires **more RAM/
 
 ```bash
 cd /opt/engineiq   # repository root: docker-compose.yml + deploy.sh live here
-chmod +x deploy.sh scripts/verify-deployment.sh scripts/register-internal-demo-tenants.sh 2>/dev/null || true
+chmod +x deploy.sh scripts/verify-deployment.sh scripts/verify-golden-four-api.sh scripts/register-internal-demo-tenants.sh 2>/dev/null || true
 ./deploy.sh
 ```
 
@@ -244,7 +244,16 @@ curl -fsSI https://engineiq.co.za | head -n 5
 curl -fsSI https://app.engineiq.co.za | head -n 5
 ```
 
-Use **`scripts/verify-deployment.sh`** on the server if included in the repo.
+Use **`scripts/verify-deployment.sh`** on the server if included in the repo (public health + static portal routes).
+
+**Golden-four tenant API** (after **`demo-tenant-state.local.env`** is filled on your laptop):
+
+```bash
+chmod +x scripts/verify-golden-four-api.sh
+./scripts/verify-golden-four-api.sh
+```
+
+Confirms **`X-Api-Key`** + **`/status`**, **`/account`**, **`/jobs`** for each persona still match production (**§11.2**: only the installation-linked tenant receives live PR webhooks; others may show empty jobs until they have their own install).
 
 ---
 

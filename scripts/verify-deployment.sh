@@ -16,4 +16,9 @@ echo "Checking marketing (HEAD): $SITE"
 curl -fsSI "$SITE" | head -n 8
 echo "Checking portal (HEAD): $PORTAL"
 curl -fsSI "$PORTAL" | head -n 8
+echo "Checking portal /overview (HEAD): $PORTAL/overview"
+curl -fsSI "$PORTAL/overview" | head -n 8
+echo "Checking portal /login (HEAD): $PORTAL/login"
+curl -fsSI "$PORTAL/login" | head -n 8
 echo "OK — basic checks completed."
+echo "Optional: TENANT_ID + TENANT_API_KEY from demo-tenant-state.local.env → scripts/verify-golden-four-api.sh"
