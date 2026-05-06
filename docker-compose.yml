@@ -97,6 +97,13 @@ services:
       context: .
       dockerfile: docker/Dockerfile.worker
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       Postgres__ConnectionString: >-
@@ -116,13 +123,6 @@ services:
       Trust__DataLocation: ${TRUST_DATA_LOCATION:-Hetzner SA / Johannesburg}
       Trust__DpaPdfUrl: ${TRUST_DPA_PDF_URL:-https://engineiq.co.za/legal/dpa.pdf}
       Trust__AiProvider: ${TRUST_AI_PROVIDER:-Anthropic}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
 
   engineiq-admin:
     profiles: [platform]
