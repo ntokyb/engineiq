@@ -1,1 +1,2 @@
-0 0 2 * * * /usr/local/bin/python /app/run_report_job.py
+# Daily reporting tick (extend to call tenant report endpoints when available)
+0 2 * * * /usr/local/bin/python3 /app/run_report_job.py
